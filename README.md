@@ -3,4 +3,4 @@ I have used geometrized units and used appropriate conversion factors to convert
 In both cases, the critical density at the centre must be speified.
 For polytropes, kappa and tau have to be initialised.
 For other EOS, a table of rho and their corresponding p values are required as input.
-In addition to mass and pressure profiles, I have also computed the profile of the tidal metric perturbation. The theory for the same is explined in the report.
+In addition to mass, density and pressure profiles, I have also computed the profile of the tidal metric perturbation. The theory for the same is explined in the report.
