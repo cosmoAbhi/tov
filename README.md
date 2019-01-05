@@ -1,5 +1,5 @@
 This code can be used to compute the TOV equations for a spherically symmetric star having any equation of state. 
-I have used geometrized units and used appropriate conversion factors to convert ever quantity to powers of length (km)
+I have used geometrized units and used appropriate conversion factors to convert every quantity to powers of length (km)
 In both cases, the critical density at the centre must be speified.
 For polytropes, kappa and tau have to be initialised.
 For other EOS, a table of rho and their corresponding p values are required as input.
