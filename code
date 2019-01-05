@@ -9,31 +9,33 @@ using namespace std;
 double EOS(double, int);//returns P as a function of rho
 double EOSinv(double, int);//returns rho as a function of P
 double EOSder(double, double, int); //returns the value of dp/d(rho)
-double mDer(double, double);
-double PDer(double, double, double, double);
+double EOS_eps(double,double,double,int); //returns specific internal energy density
+double mDer(double, double, double);
+double PDer(double, double, double, double, double);
 double betaDer(double, double, double, double, double, double, int);
 double rstart=0.001;
-double rstop=14.000;
+double rstop=100.000;
 double rstep=0.001;
 double r=0.001;
-double K=101.4496;//7.29935;
+double K=100;//7.29935;
 double tau=2.0;//5.0/3.0;
 double a0=1.0;
-double expLambda,g;
-//all units are in powers of km
+double expLambda,g,dPdr;
+//all units are in km
 //arrays for storing values of dependent variables
-double m[14000];
-double rho[14000];
-double P[14000];
-double y[14000];
-double H[14000];
-double beta[14000];
-double Ye_BE[14000];
+double m[1400000];
+double rho[1400000];
+double P[1400000];
+double eps[1400000];
+double y[1400000];
+double H[1400000];
+double beta[1400000];
+double Ye_BE[1400000];
 //arrays for storing intermediate values required to compute dependents by RK4
 double mRK[4];
 double PRK[4];
 double betaRK[4];
-double mass, press, dens, Beta, h;
+double mass, press, dens, Beta, h, epsilon;
 //arrays to store tabulated EOS entries
 int ser[1000];
 double nB[1000];
@@ -66,50 +68,56 @@ int main()
     ofstream write;
     write.open("TOVrad_output.txt");
 
-    rho[0]=0.0012355;//0.000741111;//km^(-2) central density
+    rho[0]=0.00128;//0.000741111;//km^(-2) central density
     P[0]=EOS(rho[0], choice);
-    m[0]=4/3*M_PI*pow(rstart, 3.0)*rho[0];
+    eps[0] = EOS_eps(P[0],rho[0],tau,choice); 
+    m[0]=4/3*M_PI*pow(rstart, 3.0)*rho[0]*(1.0+eps[0]);
     H[0]=a0*pow(rstart, 2.0);//a0 is arbitrarily chosen
     beta[0]=2*a0*rstart;
     y[0]=r*beta[0]/H[0];
-    g=-2.0*PDer(rstart, m[0], P[0], rho[0])/(P[0]+rho[0]);
+    //g=-2.0*PDer(rstart, m[0], P[0], rho[0], eps[0])/(P[0]+rho[0]);
+    g = -2.0*PDer(rstart, m[0], P[0], rho[0], eps[0])/(P[0]+rho[0]*(1.0+eps[0]));
+    dPdr = PDer(rstart, m[0], P[0], rho[0], eps[0]);
     Ye_BE[0]=0.1*(1-exp(-rho[0]/0.0006))+0.1*exp(-rho[0]/0.00002);
-    write<<"    r       m           P           rho         H                   y           Ye_BE       g"<<endl;
-    write<<r<<" "<< m[0]<<" "<<P[0]<<" "<<rho[0]<<" "<<H[0]<<" "<<y[0]<<" "<<Ye_BE[0]<<" "<<g<<endl;
-    for(int i=1;i<14000;i++)
+    write<<"    r           P               rho            g             dPdr "<<endl;  
+    write << r <<" "<< P[0] <<" "<< rho[0] <<" "<< g <<" " << dPdr << endl;
+    for(int i=1;i<1400000;i++)
     {
         if(r==rstop)
             break;
         //RK4 step 1: calculating 'k1's and m, P, rho, beta, H values to be used in step 2 (refer to http://mathworld.wolfram.com/Runge-KuttaMethod.html)
-        mRK[0]=rstep*mDer(r, rho[i-1]);
-        PRK[0]=rstep*PDer(r, m[i-1], P[i-1], rho[i-1]);
+        mRK[0]=rstep*mDer(r, rho[i-1], eps[i-1]);
+        PRK[0]=rstep*PDer(r, m[i-1], P[i-1], rho[i-1], eps[i-1]);
         betaRK[0]=rstep*betaDer(r, m[i-1], P[i-1], rho[i-1], beta[i-1], H[i-1], choice);
         mass=m[i-1]+mRK[0]/2.0;
         press=P[i-1]+PRK[0]/2.0;
         Beta=beta[i-1]+betaRK[0]/2.0;
         dens=EOSinv(press, choice);
+	epsilon = press/((tau-1.0)*dens); // for polytropes
         h=H[i-1]+Beta*rstep;
         //RK4 step 2: calculating 'k2's and values for step 3
-        mRK[1]=rstep*mDer(r+rstep/2.0, dens);
-        PRK[1]=rstep*PDer(r+rstep/2.0, mass, press, dens);
+        mRK[1]=rstep*mDer(r+rstep/2.0, dens, epsilon);
+        PRK[1]=rstep*PDer(r+rstep/2.0, mass, press, dens, epsilon);
         betaRK[1]=rstep*betaDer(r+rstep/2.0, mass, press, dens, Beta, h, choice);
         mass=m[i-1]+mRK[1]/2.0;
         press=P[i-1]+PRK[1]/2.0;
         Beta=beta[i-1]+betaRK[1]/2.0;
         dens=EOSinv(press, choice);
+	epsilon = EOS_eps(press,dens,tau,choice);
         h=H[i-1]+Beta*rstep;
         //RK4 step 3: calculating 'k3's and values for step 4
-        mRK[2]=rstep*mDer(r+rstep/2.0, dens);
-        PRK[2]=rstep*PDer(r+rstep/2.0, mass, press, dens);
+        mRK[2]=rstep*mDer(r+rstep/2.0, dens, epsilon);
+        PRK[2]=rstep*PDer(r+rstep/2.0, mass, press, dens, epsilon);
         betaRK[2]=rstep*betaDer(r+rstep/2.0, mass, press, dens, Beta, h, choice);
         mass=m[i-1]+mRK[2];
         press=P[i-1]+PRK[2];
         Beta=beta[i-1]+betaRK[2];
         dens=EOSinv(press, choice);
+	epsilon = EOS_eps(press,dens,tau,choice);
         h=H[i-1]+Beta*rstep;
         //RK4 step 4: calculating 'k4's
-        mRK[3]=rstep*mDer(r+rstep, dens);
-        PRK[3]=rstep*PDer(r+rstep, mass, press, dens);
+        mRK[3]=rstep*mDer(r+rstep, dens, epsilon);
+        PRK[3]=rstep*PDer(r+rstep, mass, press, dens, epsilon);
         betaRK[3]=rstep*betaDer(r+rstep, mass, press, dens, Beta, h, choice);
         //calculating RK4 final results for this step
         m[i]=m[i-1]+mRK[0]/6.0+mRK[1]/3.0+mRK[2]/3.0+mRK[3]/6.0;
@@ -118,17 +126,19 @@ int main()
             break;
         beta[i]=beta[i-1]+betaRK[0]/6.0+betaRK[1]/3.0+betaRK[2]/3.0+betaRK[3]/6.0;
         rho[i]=EOSinv(P[i], choice);
+	eps[i] = EOS_eps(P[i],rho[i],tau,choice);
         H[i]=H[i-1]+beta[i]*rstep;
         r=r+rstep;
         y[i]=r*beta[i]/H[i];
-        g=-2.0*PDer(r,m[i],P[i],rho[i])/(P[i]+rho[i]);
+	g = -2.0*PDer(r,m[i],P[i],rho[i], eps[i])/(P[i]+rho[i]*(1.0+eps[i]));
+	dPdr = PDer(r,m[i],P[i],rho[i],eps[i]);
         if(rho[i]>=1e-4)
             Ye_BE[i]=0.1*(1-exp(-rho[i]/0.0006));
         else if(rho[i]>=1e-6&&rho[i]<1e-4)
             Ye_BE[i]=0.1*(1-exp(-rho[i]/0.0006))+0.1*exp(-rho[i]/0.00002);
 
         if(isnan(m[i])==false)
-            write<<r<<" "<< m[i]<<" "<<P[i]<<" "<<rho[i]<<" "<<H[i]<<" "<<y[i]<<" "<<Ye_BE[i]<<" "<<g<<endl;
+	  write<< r <<" "<< P[i] <<" "<< rho[i] <<" "<< g <<" "<< dPdr <<endl;
     }
     write.close();
 }
@@ -196,17 +206,31 @@ double EOSder(double P, double rho, int choice)
 
                 }
                 if(pEOS[EOScount-1]==P)
-                    return (pEOS[EOScount-1]-pEOS[EOScount-2])/(rhoEOS[EOScount-1]-rhoEOS[EOScount-2]);;
+                    return (pEOS[EOScount-1]-pEOS[EOScount-2])/(rhoEOS[EOScount-1]-rhoEOS[EOScount-2]);
     }
     return 0.0;
 }
-double mDer(double r, double rho)
+double EOS_eps(double P, double rho, double tau, int choice)
 {
-    return 4.0*M_PI*pow(r, 2.0)*rho;
+  switch(choice)
+    {
+    case 1: return P/((tau-1.0)*rho);
+    case 2: // TO DO
+      {
+	cout << "ERROR: The specific enegy density has not been coded for tabulated EOS yet!!" << endl;
+	exit(1); // terminate with error
+      }
+    }
+  return 0.0;
 }
-double PDer(double r, double m, double P, double rho)
+
+double mDer(double r, double rho, double eps)
 {
-    return -1.0*(rho+P)*(m+4.0*M_PI*pow(r, 3.0)*P)/(pow(r, 2.0)-2.0*m*r);
+  return 4.0*M_PI*pow(r, 2.0)*rho*(1.0+eps);
+}
+double PDer(double r, double m, double P, double rho, double eps)
+{
+  return -1.0*(rho*(1.0+eps)+P)*(m+4.0*M_PI*pow(r, 3.0)*P)/(pow(r, 2.0)-2.0*m*r);
 }
 double betaDer(double r, double m, double P, double rho, double beta, double H, int choice)
 {
